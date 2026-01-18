@@ -5,6 +5,7 @@ Includes a CPU, ROM, RAM and MMIO, plus a custom assembler for my own instructio
 
 ## Table of Contents
 * [Overview](#overview)
+* [Running The Simulation](#running-the-simulation)
 * [Key Features](#key-features)
 * [System Architecture](#system-architecture)
     * [MCU Core](#mcu-core)
@@ -68,7 +69,9 @@ To support development and execution of programs on the MCU, the project include
 ## Example Program
 
 The project includes example programs demonstrating control flow, memory access, and memory-mapped I/O.
-The animation below shows a [program](examples/control_leds.md) running on the MCU that reads input from a controller device and updates LED outputs via MMIO.
+The video below shows a [program](examples/control_leds.md) running on the MCU that reads input from a controller device and updates LED outputs via MMIO.
+[▶️ Watch the demo video](docs/images/demovideo.mp4)
+
 
 ## Documentation
 
