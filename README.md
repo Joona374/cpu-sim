@@ -70,7 +70,7 @@ To support development and execution of programs on the MCU, the project include
 
 The project includes example programs demonstrating control flow, memory access, and memory-mapped I/O.
 The video below shows a [program](examples/control_leds.md) running on the MCU that reads input from a controller device and updates LED outputs via MMIO.
-[▶️ Watch the demo video](docs/images/demovideo.mp4)
+![Demo](docs/images/demovideo.gif)
 
 
 ## Documentation
