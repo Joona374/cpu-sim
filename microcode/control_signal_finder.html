@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control Signal Picker</title>
+    <style>
+        /* Retro terminal theme (black + green) - visual only, no JS changes */
+        :root{
+            --bg: #030405; /* almost black */
+            --panel: #07120a;
+            --green-1: #00FF41; /* bright monitor green */
+            --green-2: #00C845; /* slightly dim */
+            --muted: #6ef08a;
+            --glass: rgba(0, 32, 0, 0.22);
+        }
+
+        html,body{ height:100%; }
+        body {
+            background: radial-gradient(ellipse at top left, rgba(0,40,0,0.08), transparent 10%),
+                        linear-gradient(180deg, rgba(0,8,0,0.4), rgba(0,0,0,0.8)),
+                        var(--bg);
+            color: var(--green-2);
+            font-family: "Courier New", Courier, monospace;
+            padding: 28px;
+            max-width: 1100px;
+            margin: 18px auto;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* subtle scanlines for the 90s CRT feel */
+        body::after{
+            content: '';
+            position: fixed; inset: 0; pointer-events: none;
+            background-image: linear-gradient(rgba(0,0,0,0) 50%, rgba(0,0,0,0.02) 51%);
+            background-size: 100% 4px; mix-blend-mode: overlay; opacity: 0.9;
+        }
+
+        h1 { margin-top: 0; color: var(--green-1); text-shadow: 0 0 8px rgba(0,255,65,0.12); }
+        .small { color: #8fffb0; opacity: 0.9; }
+
+        .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top:16px; }
+
+        .bit {
+            background: linear-gradient(180deg, rgba(0,40,0,0.12), rgba(0,0,0,0.35));
+            border: 1px solid rgba(0,255,65,0.06);
+            box-shadow: 0 6px 18px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.02);
+            padding: 10px 12px;
+            border-radius: 6px;
+            display:flex; align-items:center; gap:10px;
+            transition: transform 120ms ease, box-shadow 120ms ease;
+        }
+
+        .bit:hover{ transform: translateY(-2px); box-shadow: 0 10px 30px rgba(0,255,65,0.04); }
+
+        .bit label { cursor: pointer; user-select: none; color: var(--muted); }
+        .bit strong{ color: var(--green-1); text-shadow: 0 0 6px rgba(0,255,65,0.08); }
+
+        /* Style checkboxes with accent color so they match the theme */
+        input[type="checkbox"]{ width:18px; height:18px; accent-color: var(--green-1); filter: drop-shadow(0 0 6px rgba(0,255,65,0.06)); }
+
+        .outputs { margin-top: 22px; display:flex; gap: 16px; flex-wrap:wrap; align-items:flex-start; }
+
+        .card {
+            border-radius: 8px; min-width: 220px; padding: 12px;
+            background: linear-gradient(180deg, rgba(0,40,0,0.06), rgba(0,0,0,0.25));
+            border: 1px solid rgba(0,255,65,0.06);
+            box-shadow: 0 8px 28px rgba(0,0,0,0.6);
+        }
+
+        .byte { font-family: monospace; font-size: 1.06rem; color: var(--green-1); }
+
+        .controls { margin-top: 12px; display:flex; gap:8px; flex-wrap:wrap; }
+
+        input[type="text"]{ width: 220px; background: rgba(0,0,0,0.6); color: var(--green-2); border: 1px solid rgba(0,255,65,0.06); padding:6px 8px; border-radius:6px; }
+
+        button {
+            background: linear-gradient(180deg, rgba(0,80,0,0.18), rgba(0,0,0,0.35));
+            color: var(--green-1);
+            border: 1px solid rgba(0,255,65,0.08);
+            padding: 6px 10px; border-radius:6px; box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+        }
+
+        button:hover{ box-shadow: 0 10px 30px rgba(0,255,65,0.06); transform: translateY(-2px); }
+
+        /* make hex text pop */
+        #rom { font-weight: 700; color: #baffc7; text-shadow: 0 0 10px rgba(0,255,65,0.08); }
+
+        @media (max-width:880px){ .grid { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width:520px){ .grid { grid-template-columns: repeat(1, 1fr); } .outputs{ flex-direction:column; } }
+    </style>
+</head>
+<body>
+    <h1>CPU Control Signal Picker</h1>
+    <p class="small">Click bits to build the control word (signals are listed LSB -> MSB). The page shows three bytes (signals 0-7, 8-15, 16-23) as hex and binary.</p>
+
+    <div style="display:flex; align-items:center; gap:10px; margin-top:8px;">
+        <button id="resetBtn" title="Clear all selected bits">Reset all</button>
+        <span class="small">Quickly clear all selected signals before editing next opcode</span>
+    </div>
+
+    <div id="bits" class="grid" aria-live="polite"></div>
+
+    <div class="outputs">
+        <div class="card">
+            <strong>Signals 0 - 7</strong>
+            <div id="byte0" class="byte">0b00000000 — 0x00</div>
+        </div>
+        <div class="card">
+            <strong>Signals 8 - 15</strong>
+            <div id="byte1" class="byte">0b00000000 — 0x00</div>
+        </div>
+        <div class="card">
+            <strong>Signals 16 - 23</strong>
+            <div id="byte2" class="byte">0b00000000 — 0x00</div>
+        </div>
+
+        <div class="card" style="flex:1; min-width:260px;">
+            <strong>ROM bytes</strong>
+            <div id="rom" class="byte">0x00 0x00 0x00</div>
+            <div class="small" style="margin-top:8px">(Shown as: 0-7, 8-15, 16-23)</div>
+            <div class="controls">
+                <button id="copyBtn">Copy ROM</button>
+                <button id="downloadBtn">Download .txt</button>
+                <button id="exampleBtn">Load example 0x60 0xA2 0x93</button>
+            </div>
+            <div style="margin-top:8px">
+                <input id="hexInput" type="text" placeholder="paste hex like: 0x60 0xA2 0x93" />
+                <button id="loadHexBtn">Load</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Labels for signals 0..23 in LSB->MSB order
+        const labels = [
+            'TEMP_LO_load','TEMP_HI_load','ALUTMP_load','RD_en','WR_en','PC_L_en','PC_H_en','R0_en',
+            'ADDRBUS_sel', 'ALU_op0','ALU_op1','BUS_sel0','BUS_sel1', 'BUS_sel2', 'IR_load','ACC_load',
+            'MAR_L','PC_src','PC_inc','FLAGS_en','RET_PC_en','µPC_sel0','µPC_sel1','MAR_H'
+        ];
+
+        const bitsContainer = document.getElementById('bits');
+
+        // Create 24 checkboxes
+        for (let i = 0; i < 24; i++) {
+            const bit = document.createElement('div');
+            bit.className = 'bit';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.id = 'b' + i;
+            cb.dataset.bit = i;
+            const lbl = document.createElement('label');
+            lbl.htmlFor = cb.id;
+            lbl.innerHTML = `<strong>#${i}</strong>: ${labels[i]}`;
+            bit.appendChild(cb);
+            bit.appendChild(lbl);
+            bitsContainer.appendChild(bit);
+            cb.addEventListener('change', computeAll);
+        }
+
+        // DOM elements
+        const byte0El = document.getElementById('byte0');
+        const byte1El = document.getElementById('byte1');
+        const byte2El = document.getElementById('byte2');
+    const romEl = document.getElementById('rom');
+    const copyBtn = document.getElementById('copyBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const exampleBtn = document.getElementById('exampleBtn');
+    const hexInput = document.getElementById('hexInput');
+    const loadHexBtn = document.getElementById('loadHexBtn');
+    const resetBtn = document.getElementById('resetBtn');
+
+        function computeByte(startBit) {
+            let val = 0;
+            for (let bit = 0; bit < 8; bit++) {
+                const idx = startBit + bit;
+                const cb = document.getElementById('b' + idx);
+                if (cb && cb.checked) {
+                    val |= (1 << bit);
+                }
+            }
+            return val & 0xFF;
+        }
+
+        function toBin8(x) {
+            return '0b' + x.toString(2).padStart(8, '0');
+        }
+
+        function toHex2(x) {
+            return '0x' + x.toString(16).toUpperCase().padStart(2, '0');
+        }
+
+        function computeAll() {
+            const b0 = computeByte(0);
+            const b1 = computeByte(8);
+            const b2 = computeByte(16);
+            byte0El.textContent = `${toBin8(b0)} — ${toHex2(b0)}`;
+            byte1El.textContent = `${toBin8(b1)} — ${toHex2(b1)}`;
+            byte2El.textContent = `${toBin8(b2)} — ${toHex2(b2)}`;
+            romEl.textContent = `${toHex2(b0)} ${toHex2(b1)} ${toHex2(b2)}`;
+        }
+
+        copyBtn.addEventListener('click', async () => {
+            const txt = romEl.textContent.trim();
+            try {
+                await navigator.clipboard.writeText(txt);
+                copyBtn.textContent = 'Copied!';
+                setTimeout(() => copyBtn.textContent = 'Copy ROM', 1200);
+            } catch (e) {
+                alert('Clipboard not available: ' + e);
+            }
+        });
+
+        downloadBtn.addEventListener('click', () => {
+            const text = romEl.textContent.trim() + '\n';
+            const blob = new Blob([text], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'rom_bytes.txt';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        });
+
+        // Example provided in your request
+        exampleBtn.addEventListener('click', () => {
+            loadFromHexString('0x60 0xA2 0x93');
+        });
+
+        loadHexBtn.addEventListener('click', () => {
+            loadFromHexString(hexInput.value);
+        });
+
+        // Reset button clears all 24 checkboxes
+        if (resetBtn) {
+            resetBtn.addEventListener('click', () => {
+                for (let i = 0; i < 24; i++) {
+                    const cb = document.getElementById('b' + i);
+                    if (cb) cb.checked = false;
+                }
+                computeAll();
+                // brief feedback
+                const old = resetBtn.textContent;
+                resetBtn.textContent = 'Cleared';
+                setTimeout(() => resetBtn.textContent = old, 800);
+            });
+        }
+
+        function loadFromHexString(s) {
+            if (!s) return;
+            // accept: 0x60 0xA2 0x93, or hex without 0x, comma separated, etc.
+            const parts = s.replace(/,/g, ' ').split(/\s+/).filter(Boolean);
+            if (parts.length < 3) {
+                alert('Please provide three byte values (for signals 0-7, 8-15, 16-23)');
+                return;
+            }
+            try {
+                const bytes = parts.slice(0,3).map(p => parseInt(p.replace(/^0x/i, ''), 16));
+                if (bytes.some(b => Number.isNaN(b) || b < 0 || b > 0xFF)) throw new Error('invalid hex');
+                // Set checkboxes according to bytes
+                for (let bit = 0; bit < 24; bit++) {
+                    const bIdx = Math.floor(bit / 8);
+                    const pos = bit % 8; // LSB within each byte
+                    const checked = !!(bytes[bIdx] & (1 << pos));
+                    const cb = document.getElementById('b' + bit);
+                    if (cb) cb.checked = checked;
+                }
+                computeAll();
+            } catch (e) {
+                alert('Could not parse hex: ' + e);
+            }
+        }
+
+        // Initialize
+        computeAll();
+    </script>
+</body>
+</html>

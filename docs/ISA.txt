@@ -1,0 +1,126 @@
+BIN     MNE     2. word     3. word     DESCRIPTION
+0000    NOP     -           -           No operation
+0001    LDI     Immediate   -           Load Immediate to Accumulator
+0010    ACC2R0  -           -           R0 <= ACC
+0011    ADDI    Immediate   -           Add Immediate to Accumulator
+0100    STA     MEM[7:4]    MEM[3:0]    Store Accumulator to Memory
+0101    LDA     MEM[7:4]    MEM[3:0]    Load Accumulator from Memory
+0110    SUBI    Immediate   -           Subtract Immediate from Accumulator
+0111    JMP     MEM[7:4]    MEM[3:0]    Jump to MEM[7:0]
+1000    JZ      MEM[7:4]    MEM[3:0]    Jump if Accumulator is Zero
+1001    R02ACC  -           -           R0 => ACC
+1010    CMPI    Immediate   -           Compare Immediate with Accumulator, sets flags without changing Accumulator
+1011    CALL    MEM[7:4]    MEM[3:0]    Jump to MEM[7:0] and save following PC to RET_PC
+1100    RET     -           -           Return from Subroutine to address in RET_PC
+1101    LDMAR   Immediate   -           MAR[7:4] ← imm4, MAR[3:0] ← ACC, used for indirect addressing
+1110    STA_MAR -           -           Store ACC at MEM[MAR] (indirect addressing)
+1111    LDA_MAR -           -           Load from MEM[MAR] to ACC (indirect addressing)
+
+
+MEMORY MAP
+Address     Name        Description
+0x00-0x7F   ROM         Program memory
+0x80-0x8F   RAM         Data memory                 (THIS IS ONLY 16 BYTES, COULD / SHOULD BE EXPANDED)
+0xC0-0xFF   I/O         Memory-mapped I/O
+
+0000 0000 -  0111 1111 0-127: Program memory (ROM)
+1000 0000 -  1000 1111 128-143: Data memory (RAM)   (THIS IS ONLY 16 BYTES, COULD / SHOULD BE EXPANDED)
+1100 0000 -  1111 1111 192-255: Memory-mapped I/O
+
+CONTROL SIGNALS
+Label           Description
+----------------------------------------
+TEMP_LO_load    Enable loading low byte to LO_TEMP register
+TEMP_HI_load    Enable loading high byte to HI_TEMP register
+ALUTMP_load     Enable loading to ALU temporary register
+RD_en           Enable read operation from memory
+WR_en           Enable write operation to memory
+PC_L_en         Enable loading low byte from LO_TEMP to Program Counter
+PC_H_en         Enable loading high byte from HI_TEMP to Program Counter
+UNUSED          UNUSED
+
+ADDRBUS_sel     Select address bus source (0=PC, 1=MAR)
+ALU_op0         ALU operation select bit 0
+ALU_op1         ALU operation select bit 1
+00 = ADD, 01 = SUB
+BUS_sel0        Bus select bit 0
+BUS_sel1        Bus select bit 1
+BUS_sel2        Bus select bit 2
+000 = DBUS_in, 001 = R0, 010 = ACC, 011 = ALU
+100 = TEMP_lo, 101 = TEMP_hi, 110 = RET_LO, 111 = RET_HI
+IR_load         Instruction Register load enable
+ACC_load        ACC load enable
+
+MAR_L           Memory Address Register low nible load enable
+PC_src          This signal needs to be enabled to write LOW or HIGH nible from temp register.
+PC_inc          While enable PC increments by one on edge
+FLAGS_en        Loads signals from ALU to FLAGS
+RET_PC_en       Load value from PC to RET_PC (used fro CALL -> RET)
+µPC_sel0
+µPC_sel1
+µPC_sel[1:0]
+00 = Increment by one
+01 = DispatchROM[IR]
+10 = Fetc aka 00000000
+11 = IF NOT ZERO increment by 4 (JZ)
+MAR_H           Memory Address Register high nible load enable
+
+
+MICROCODE
+00000 Fetch(1):  IR_load,  RD_en
+00001 Dispatch: µPC_sel0, PC_inc
+
+00010 NOP: µPC_sel1
+
+00011 LDI(1): RD_en, ACC_load, µPC_sel1, PC_inc 
+
+00101 ACC2R0(1): R0_en, BUS_sel1, µPC_sel1
+
+00111 ADDI(1): ALUTMP_load, RD_en, FLAGS_en
+01000 ADDI(2): ACC_load, BUS_selo0, BUS_selo1, µPC_sel1, PC_inc,
+
+01001 STA(1): RD_en, TEMP_HI_load, PC_inc
+01010 STA(2): RD_en, TEMP_LO_load, PC_inc
+01011 STA(3): MAR_HI_load, BUS_sel2, BUS_sel0 
+01100 STA(4): MAR_LO_load, BUS_sel2
+01101 STA(5): ADDRBUS_sel, WR_en, BUS_sel 010, µPC_sel1
+
+01110 LDA(1): RD_en, TEMP_HI_load, PC_inc
+01111 LDA(2): RD_en, TEMP_LO_load, PC_inc
+10000 LDA(3): MAR_HI_load, BUS_sel2, BUS_sel0 
+10001 LDA(4): MAR_LO_load, BUS_sel2
+10010 LDA(5): ADDRBUS_sel, RD_en, ACC_load, µPC_sel1
+
+10011 SUBI(1): ALU_op 01, ALUTMP_load, RD_en, FLAGS_en
+10100 SUBI(2): ACC_load, BUS_sel 011, PC_inc,  µPC_sel1
+
+10101 JMP(1): RD_en, TEMP_HI_load, PC_inc
+10110 JMP(2): RD_en, TEMP_LO_load, PC_inc
+10111 JMP(3): PC_H_en, BUS_sel2, BUS_sel0, PC_src 
+11000 JMP(4): PC_L_en, BUS_sel2, PC_src, µPC_sel1
+
+11001 JZ(1): µPC_sel0, µPC_sel1, RD_en, TEMP_HI_load, PC_inc
+11010 JZ(2): RD_en, TEMP_LO_load
+11011 JZ(3): PC_H_en, BUS_sel2, BUS_sel0, PC_src 
+11100 JZ(4): PC_L_en, BUS_sel2, PC_src, µPC_sel1(end early)
+11101 JZ(5): µPC_sel1, PC_inc
+
+11110 CMPI(1): ALU_op 01, ALUTMP_load, RD_en, FLAGS_en, PC_inc,  µPC_sel1
+
+100000 CALL(1): RD_en, TEMP_HI_load, PC_inc
+100001 CALL(2): RD_en, TEMP_LO_load, PC_inc
+100010 CALL(3): RET_PC_en
+100011 CALL(4): PC_H_en, BUS_sel2, BUS_sel0, PC_src 
+100100 CALL(5): PC_L_en, BUS_sel2, PC_src, µPC_sel1
+
+100101 RET(1): BUS_sel0, BUS_sel1, BUS_sel2, PC_H_EN, PC_SRC
+100110 RET(2): BUS_sel1, BUS_sel2, PC_L_EN, PC_SRC, µPC_sel1
+
+100111 LDMAR(1): PC_inc, RD_en, MAR_HI_load
+101000 LDMAR(2): MAR_LO_load, BUS_sel1, µPC_sel1
+
+101001 STA_MAR(1):ADDRBUS_sel, WR_en, BUS_sel 010, µPC_sel1
+
+101010 LDA_MAR(1): ADDRBUS_sel, RD_en, ACC_load, µPC_sel1
+
+101011 R02ACC(1): BUS_sel1, ACC_load, µPC_sel1
